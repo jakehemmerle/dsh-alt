@@ -45,7 +45,7 @@ export function apply(ctx, config = {}) {
     if (!held) return;
     if (!final) state.release = true;
     try {
-      state.stream.unshift(state.buffer ? Buffer.from(held, 'utf8') : held);
+      state.stream.unshift(state.buffer ? Buffer.from(held, 'latin1') : held);
     } catch {
       // The stream has ended or been destroyed; nothing will read it.
     }
@@ -61,7 +61,9 @@ export function apply(ctx, config = {}) {
     state.timer = null;
     waiting.delete(state);
     state.buffer = isBuffer;
-    const text = isBuffer ? chunk.toString('utf8') : chunk;
+    // Every rule and marker is ASCII, so a Buffer is translated byte for byte
+    // as latin1: split or invalid UTF-8 passes through untouched (P-09).
+    const text = isBuffer ? chunk.toString('latin1') : chunk;
     let out = state.translate(text);
     if (state.release) {
       // This read carries bytes released by the hold timer: nothing more is
@@ -76,7 +78,7 @@ export function apply(ctx, config = {}) {
     }
     if (out === text) return chunk;
     if (out === '') return null;
-    return isBuffer ? Buffer.from(out, 'utf8') : out;
+    return isBuffer ? Buffer.from(out, 'latin1') : out;
   }
 
   proto.read = read;
