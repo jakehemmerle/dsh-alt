@@ -20,6 +20,20 @@ test('P-06 any split of the input into reads gives the single-read output', () =
   }));
 });
 
+// A paste whose start marker is cut at every possible point; the body carries Option
+// sequences that must survive verbatim.
+const optionish = fc.array(fc.constantFrom('\x1b\x7f', '\x1bb', '\x1bf', '\x1b[1;3D', '\x1b\x1b[C', 'x', ' ', '中'), { minLength: 1, maxLength: 8 }).map((a) => a.join(''));
+
+test('P-07 a paste-start marker split across reads still protects the paste body', () => {
+  check('P-07', fc.property(optionish, optionish, fc.integer({ min: 1, max: 5 }), (before, body, cut) => {
+    const input = `${before}\x1b[200~${body}\x1b[201~`;
+    const at = before.length + cut; // inside "\x1b[200~"
+    const out = feed(splitAt(input, [at]));
+    assert.equal(JSON.stringify(out), JSON.stringify(expected(input)));
+    assert.ok(out.includes(`\x1b[200~${body}\x1b[201~`), 'paste body rewritten');
+  }));
+});
+
 test('P-06 regression: ESC and DEL in separate reads still become Ctrl+W', () => {
   assert.equal(JSON.stringify(feed(['abc \x1b', '\x7f'])), JSON.stringify('abc \x17'));
   assert.equal(JSON.stringify(feed(['\x1b[1;', '3D'])), JSON.stringify('\x1b[1;5D'));
