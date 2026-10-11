@@ -34,6 +34,20 @@ test('P-07 a paste-start marker split across reads still protects the paste body
   }));
 });
 
+test('P-08 a paste-end marker split across reads does not leave the translator stuck in paste', () => {
+  check('P-08', fc.property(optionish, fc.integer({ min: 1, max: 5 }), fc.constantFrom('\x1b\x7f', '\x1bb', '\x1b[1;3C'), (body, cut, after) => {
+    const input = `\x1b[200~${body}\x1b[201~${after}`;
+    const at = 6 + body.length + cut; // inside "\x1b[201~"
+    const t = createTranslator();
+    let out = '';
+    for (const p of splitAt(input, [at])) out += t(p);
+    out += typeof t.flush === 'function' ? t.flush() : '';
+    assert.equal(JSON.stringify(out), JSON.stringify(expected(input)));
+    // Later keystrokes are still translated.
+    assert.equal(JSON.stringify(t('\x1b\x7f') + (typeof t.flush === 'function' ? t.flush() : '')), JSON.stringify('\x17'));
+  }));
+});
+
 test('P-06 regression: ESC and DEL in separate reads still become Ctrl+W', () => {
   assert.equal(JSON.stringify(feed(['abc \x1b', '\x7f'])), JSON.stringify('abc \x17'));
   assert.equal(JSON.stringify(feed(['\x1b[1;', '3D'])), JSON.stringify('\x1b[1;5D'));
