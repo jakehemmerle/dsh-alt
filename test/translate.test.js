@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { createTranslator } from '../lib/translate.js';
+import { resolveTuiTypes } from './support/tui-types.js';
 
 // One read through a fresh translator, then release whatever it holds (SPEC.md P-10).
 const T = () => { const t = createTranslator(); return (s) => t(s) + t.flush(); };
@@ -27,19 +30,30 @@ test('P-05 bracketed paste is passed through, even across chunks', () => {
   assert.equal(t('\x1bb\x1b[201~\x1bb'), '\x1bb\x1b[201~\x1b[1;5D');
 });
 
-// End to end against dsh-TUI's own key parser when its path is supplied.
-const types = process.env.DSH_TUI_TYPES;
-test('dsh-TUI parses the translations as the bound keys', { skip: !types }, async () => {
-  const { parseMultipleKeypresses, INITIAL_STATE } = await import(`${types}/ink/parse-keypress.js`);
-  const { InputEvent } = await import(`${types}/ink/events/input-event.js`);
+// End to end against dsh-TUI's own key parser (SPEC.md P-11): every run, and
+// every Option encoding, must parse as the bound Ctrl key. A missing dsh-TUI
+// is a failure, not a skip (alt-hvt.14).
+const OPTION_ENCODINGS = [
+  ['\x1b\x7f', 'backspace'], ['\x1b\b', 'backspace'],
+  ['\x1b[1;3D', 'leftArrow'], ['\x1bb', 'leftArrow'], ['\x1b\x1b[D', 'leftArrow'],
+  ['\x1b[1;3C', 'rightArrow'], ['\x1bf', 'rightArrow'], ['\x1b\x1b[C', 'rightArrow'],
+];
+
+test('P-11 dsh-TUI parses every translation as the bound key', async () => {
+  const types = resolveTuiTypes();
+  const { parseMultipleKeypresses, INITIAL_STATE } = await import(pathToFileURL(join(types, 'ink', 'parse-keypress.js')).href);
+  const { InputEvent } = await import(pathToFileURL(join(types, 'ink', 'events', 'input-event.js')).href);
   const keys = (s) => parseMultipleKeypresses(INITIAL_STATE, T()(s))[0].map((k) => new InputEvent(k));
-  const [bs] = keys('\x1b\x7f');
-  assert.equal(bs.input, 'w');
-  assert.equal(bs.key.ctrl, true);
-  assert.equal(bs.key.escape, false);
-  for (const [s, dir] of [['\x1b[1;3D', 'leftArrow'], ['\x1bf', 'rightArrow']]) {
-    const [ev] = keys(s);
-    assert.equal(ev.key[dir], true);
-    assert.equal(ev.key.ctrl, true);
+  for (const [encoding, arrow] of OPTION_ENCODINGS) {
+    if (arrow === 'backspace') {
+      const [ev] = keys(encoding);
+      assert.equal(ev.input, 'w', encoding);
+      assert.equal(ev.key.ctrl, true, encoding);
+      assert.equal(ev.key.escape, false, encoding);
+    } else {
+      const [ev] = keys(encoding);
+      assert.equal(ev.key[arrow], true, encoding);
+      assert.equal(ev.key.ctrl, true, encoding);
+    }
   }
 });
