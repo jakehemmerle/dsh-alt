@@ -29,7 +29,7 @@ export function apply(ctx, config = {}) {
   function stateFor(stream) {
     let state = states.get(stream);
     if (!state) {
-      state = { translate: createTranslator(), timer: null, release: false, buffer: false, stream };
+      state = { translate: createTranslator(), timer: null, kick: null, release: false, buffer: false, stream };
       states.set(stream, state);
     }
     return state;
@@ -40,6 +40,8 @@ export function apply(ctx, config = {}) {
   function releaseHeld(state, final) {
     clearTimeout(state.timer);
     state.timer = null;
+    clearInterval(state.kick);
+    state.kick = null;
     waiting.delete(state);
     const held = state.translate.flush();
     if (!held) return;
@@ -59,6 +61,8 @@ export function apply(ctx, config = {}) {
     const state = stateFor(this);
     clearTimeout(state.timer);
     state.timer = null;
+    clearInterval(state.kick);
+    state.kick = null;
     waiting.delete(state);
     state.buffer = isBuffer;
     // Every rule and marker is ASCII, so a Buffer is translated byte for byte
@@ -73,6 +77,16 @@ export function apply(ctx, config = {}) {
     }
     if (state.translate.pending()) {
       waiting.add(state);
+      // dsh-TUI's ink pump stops when a read returns null and, on a stream it
+      // has already drained, does not see a 'readable' for the next write — so
+      // a follow-up byte written inside the hold window (e.g. the DEL of ESC
+      // DEL arriving as its own write, as terminals that send Option as Meta
+      // do) would only be read after the hold releases it, as a stray Escape.
+      // Re-kick the pump while the hold is pending so the pair completes.
+      state.kick = setInterval(() => {
+        try { state.stream.emit('readable'); } catch { /* stream gone */ }
+      }, 5);
+      state.kick.unref?.();
       state.timer = setTimeout(() => releaseHeld(state, false), state.translate.inPaste() ? PASTE_HOLD_MS : HOLD_MS);
       state.timer.unref?.();
     }
