@@ -82,7 +82,10 @@ function caretOf(tui) {
 const ACTIONS = {
   type: { step: (tui, r, m) => { const w = pick(r, WORDS) + (r() < 0.5 ? ' ' : ''); tui.text(w); m[0] = m[0].slice(0, m[1]) + w + m[0].slice(m[1]); m[1] += w.length; } },
   bspace: { step: (tui, r, m) => { tui.keys('BSpace'); if (m[1] > 0) { m[0] = m[0].slice(0, m[1] - 1) + m[0].slice(m[1]); m[1] -= 1; } } },
-  left: { step: (tui, r, m) => { tui.keys('Left'); m[1] = Math.max(0, m[1] - 1); } },
+  // Left at caret 0 is dsh-TUI's own session-dashboard navigation (stock
+  // behaviour, outside the plugin's editor contract), so only exercise the
+  // arrow where it moves the caret.
+  left: { step: (tui, r, m) => { if (m[1] === 0) return; tui.keys('Left'); m[1] -= 1; } },
   right: { step: (tui, r, m) => { tui.keys('Right'); m[1] = Math.min(m[0].length, m[1] + 1); } },
   optbs: { step: (tui, r, m) => { tui.raw(pick(r, OPT_BS)); const [d, c] = backspaceWord(m); m[0] = d; m[1] = c; } },
   optleft: { step: (tui, r, m) => { tui.raw(pick(r, OPT_LEFT)); m[1] = wordLeft(m[0], m[1]); } },
@@ -111,7 +114,8 @@ function genSequence(r) {
 async function assertStep(tui, surface, model, trace) {
   await sleep(SETTLE);
   const capture = tui.capture();
-  const got = draftOf(capture, surface);
+  let got;
+  try { got = draftOf(capture, surface); } catch (e) { throw new Error('after [' + trace.join(' -> ') + ']: ' + e.message); }
   // Trailing whitespace does not render (the pane trims it); the exact caret
   // assert below still pins it, and submitDraft checks the submitted prompt.
   assert.equal(got.replace(/\s+$/, ''), model[0].replace(/\s+$/, ''), 'draft after ' + trace.join(' -> '));
@@ -211,6 +215,7 @@ test('P-01..P-08 P-10 P-15 chat: generated sequences match the word-rule model',
         const turnsBefore = mock.turns().length;
         await submitDraft(tui, mock, turnsBefore, model[0], 'chat');
         await sleep(300);
+        try { draftOf(tui.capture(), 'chat'); } catch (e) { throw new Error('case ' + run + ': prompt gone right after submit:\n' + tui.capture()); }
       }
     } finally { await tui.kill(); }
   });
