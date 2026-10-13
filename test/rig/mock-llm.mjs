@@ -103,7 +103,14 @@ export async function startMockLlm({ port = 0, script } = {}) {
       if (!holdWhen) while (held.length) held.shift()();
     },
     held() { return held.length; },
-    async close() { this.hold(false); await new Promise((resolve) => server.close(resolve)); },
+    async close() {
+      this.hold(false);
+      // Keep-alive sockets the host left open on idle pools would make server.close()
+      // hang the test process (observed on the web profile); destroy them all first.
+      server.closeIdleConnections?.();
+      server.closeAllConnections?.();
+      await new Promise((resolve) => server.close(resolve));
+    },
   };
 }
 
