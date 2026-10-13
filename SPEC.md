@@ -80,7 +80,7 @@ a real dsh-TUI process (Launchpad, chat) in a private tmux socket; "Web" is a re
 | P-12 | **Lifecycle:** `apply` installs exactly one wrapper on `tty.ReadStream.prototype.read`; disposing restores the original (and releases held bytes); `enabled: false` installs nothing; each stream has independent state. | Core: prototype identity, a real plugin context. | Core |
 | P-13 | **Launchpad patch contract:** the vendored `launchpad-word-edit.patch` applies to the pinned dsh-TUI 0.14.0 and its Launchpad implements the word rule for Ctrl+W/Ctrl+Left/Ctrl+Right. | Nix build (patch applies) + TUI-L properties above. | TUI-L |
 | P-14 | **Web inertness:** with dsh-alt loaded into a real `dsh web` profile, the plugin loads without warnings, the page has no errors, and composer typing (including Alt/Option chords and Backspace) yields the same text as the browser's own model; a submitted prompt reaches the mock model exactly once and verbatim. | Playwright DOM + mock request log. | Web |
-| P-15 | **Prompt fidelity:** in chat and on the Launchpad, the prompt sent to the model after Enter equals the model draft (no translated byte leaks into the prompt, no draft loss). | Mock request log. | TUI-L, TUI-C |
+| P-15 | **Prompt fidelity:** in chat and on the Launchpad, the prompt sent to the model after Enter equals the model draft (no translated byte leaks into the prompt, no draft loss). Observed stock dsh-TUI 0.14.0 behaviour, outside the plugin: the editor strips surrounding whitespace when it submits (`'   abc def  '` reaches the model as `abc def`; verified against the pinned build), so word-rule content is compared modulo that trim. | Mock request log. | TUI-L, TUI-C |
 
 ### Generated action model (TUI)
 

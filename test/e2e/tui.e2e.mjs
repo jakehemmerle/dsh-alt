@@ -138,16 +138,22 @@ async function ensureEmptyPrompt(tui, surface, model) {
   model[0] = ''; model[1] = 0;
 }
 async function submitDraft(tui, mock, turnsBefore, draft, surface) {
+  // The prompt reaches the mock modulo dsh-TUI 0.14.0's own editor trim: on
+  // submit the stock editor strips surrounding whitespace (verified against
+  // the pinned build: '   abc def  ' reaches the model as 'abc def'; seed
+  // 31337's launchpad case 27 ' alphagamma' had to be whole-trimmed, not
+  // trailing-trimmed). SPEC.md P-15 records this observed stock behaviour.
+  const norm = (s) => s.replace(/^\s+/, '').replace(/\s+$/, '');
+  const want = norm(draft);
   for (let attempt = 0; attempt < 3; attempt += 1) {
     await sleep(250);
     tui.keys('Enter');
     const deadline = Date.now() + 6000;
     while (Date.now() < deadline) {
       const newTurns = mock.turns().slice(turnsBefore);
-      const want = draft.replace(/\s+$/, '');
       const userTexts = (t) => (t.messages ?? []).filter((m) => m.role === 'user')
         .map((m) => typeof m.content === 'string' ? m.content : (m.content ?? []).map((p) => p?.text ?? '').join(''));
-      if (newTurns.some((t) => userTexts(t).some((u) => u.replace(/\s+$/, '') === want || u.startsWith(want)))) return;
+      if (newTurns.some((t) => userTexts(t).some((u) => norm(u) === want || norm(u).startsWith(want)))) return;
       await sleep(150);
     }
   }
